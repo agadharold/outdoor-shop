@@ -18,12 +18,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else {
             $st = $pdo->prepare("INSERT IGNORE INTO categories (slug, name) VALUES (?, ?)");
             $st->execute([make_slug($name), $name]);
-            flash($st->rowCount() ? "Category “$name” added." : 'A category with that name already exists.', $st->rowCount() ? 'ok' : 'err');
+            if ($st->rowCount()) log_activity('category_add', "Added category “{$name}”");
+            flash($st->rowCount() ? "Category “{$name}” added." : 'A category with that name already exists.', $st->rowCount() ? 'ok' : 'err');
         }
     } elseif ($action === 'rename') {
         if ($name === '' || mb_strlen($name) > 80) { flash('Enter a category name (max 80 characters).', 'err'); }
-        else { $pdo->prepare("UPDATE categories SET name = ? WHERE id = ?")->execute([$name, $id]); flash('Category renamed.'); }
+        else {
+            $old = $pdo->prepare("SELECT name FROM categories WHERE id = ?"); $old->execute([$id]); $oldName = $old->fetchColumn();
+            $pdo->prepare("UPDATE categories SET name = ? WHERE id = ?")->execute([$name, $id]);
+            if ($oldName !== false && $oldName !== $name) log_activity('category_rename', "Renamed category “{$oldName}” → “{$name}”");
+            flash('Category renamed.');
+        }
     } elseif ($action === 'delete') {
+        if (!is_owner()) { flash('Only the owner can delete categories.', 'err'); redirect('categories.php'); }
+        require_sudo('categories.php');
+        $nm = $pdo->prepare("SELECT name FROM categories WHERE id = ?"); $nm->execute([$id]); $catName = (string)$nm->fetchColumn();
         $cnt = $pdo->prepare("SELECT COUNT(*) FROM products WHERE category_id = ?");
         $cnt->execute([$id]);
         $n = (int)$cnt->fetchColumn();
@@ -37,11 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($n > 0) $pdo->prepare("UPDATE products SET category_id = ? WHERE category_id = ?")->execute([$moveTo, $id]);
         $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$id]);
         $pdo->commit();
+        log_activity('category_delete', "Deleted category “{$catName}”" . ($n > 0 ? ", $n product(s) moved" : ''));
         flash('Category deleted.' . ($n > 0 ? " $n product(s) moved." : ''));
     }
     redirect('categories.php');
 }
 
+$iAmOwner = is_owner();
 $cats = $pdo->query("SELECT c.*, COUNT(p.id) AS n FROM categories c LEFT JOIN products p ON p.category_id = c.id GROUP BY c.id ORDER BY c.name")->fetchAll();
 $title = 'Admin · Categories';
 $adminActive = 'categories';
@@ -62,7 +73,7 @@ include '../includes/header.php';
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Category</th><th>Products</th><th>Delete</th></tr></thead>
+      <thead><tr><th>Category</th><th>Products</th><?php if ($iAmOwner): ?><th>Delete</th><?php endif; ?></tr></thead>
       <tbody>
       <?php foreach ($cats as $c): ?>
         <tr>
@@ -74,6 +85,7 @@ include '../includes/header.php';
             </form>
           </td>
           <td><?= (int)$c['n'] ?></td>
+          <?php if ($iAmOwner): ?>
           <td>
             <form method="post" class="inline-form" onsubmit="return confirm('Delete this category?');">
               <?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="category_id" value="<?= (int)$c['id'] ?>">
@@ -86,6 +98,7 @@ include '../includes/header.php';
               <button type="submit" class="btn sm danger">Delete</button>
             </form>
           </td>
+          <?php endif; ?>
         </tr>
       <?php endforeach; ?>
       </tbody>

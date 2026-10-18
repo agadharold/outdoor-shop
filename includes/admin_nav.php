@@ -1,8 +1,16 @@
-<?php $adminActive = $adminActive ?? ''; ?>
+<?php
+$adminActive = $adminActive ?? '';
+$__role = current_role();
+$__tabs = ['orders' => ['Orders', 'orders.php', 'staff']];
+if (in_array($__role, ['admin', 'owner'], true)) {
+    $__tabs += ['products' => ['Products', 'products.php', 'admin'], 'categories' => ['Categories', 'categories.php', 'admin'], 'users' => ['Users', 'users.php', 'admin']];
+}
+if ($__role === 'owner') {
+    $__tabs += ['reports' => ['Reports', 'reports.php', 'owner'], 'activity' => ['Activity log', 'activity.php', 'owner'], 'settings' => ['Settings', 'settings.php', 'owner']];
+}
+?>
 <div class="chips">
-  <a class="chip <?= $adminActive === 'orders' ? 'on' : '' ?>" href="orders.php">Orders</a>
-  <a class="chip <?= $adminActive === 'products' ? 'on' : '' ?>" href="products.php">Products</a>
-  <a class="chip <?= $adminActive === 'categories' ? 'on' : '' ?>" href="categories.php">Categories</a>
-  <a class="chip <?= $adminActive === 'users' ? 'on' : '' ?>" href="users.php">Users</a>
-  <a class="chip <?= $adminActive === 'settings' ? 'on' : '' ?>" href="settings.php">Settings</a>
+  <?php foreach ($__tabs as $__k => [$__label, $__href]): ?>
+    <a class="chip <?= $adminActive === $__k ? 'on' : '' ?>" href="<?= $__href ?>"><?= $__label ?></a>
+  <?php endforeach; ?>
 </div>

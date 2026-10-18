@@ -10,11 +10,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $st = db()->prepare("SELECT * FROM users WHERE username = ? OR email = ?");
     $st->execute([$id, $id]);
     $u = $st->fetch();
-    if ($u && password_verify($_POST['password'] ?? '', $u['password_hash'])) {
-        login_user($u);
-        redirect($next);
+    // Failures are counted per ACCOUNT (its username), so trying the email address instead cannot dodge the lock.
+    $ident = login_ident($u ? $u['username'] : $id);
+    $wait = login_lock_minutes($ident);
+    if ($wait > 0) {
+        // locked: do not even check the password
+        $error = "Too many failed log-in attempts. Please try again in $wait minute" . ($wait === 1 ? '' : 's') . '.';
+    } else {
+        if ($u && password_verify($_POST['password'] ?? '', $u['password_hash'])) {
+            login_clear_failures($u['username']);
+            login_user($u);
+            $role = role_of($u);
+            if ($role !== 'customer') log_activity('login', 'Logged in', ['id' => $u['id'], 'username' => $u['username'], 'role' => $role]);
+            redirect($next);
+        }
+        login_record_failure($ident);
+        $error = 'Invalid username or password.';
+        if (login_lock_minutes($ident) > 0) {
+            $error = 'Too many failed log-in attempts. This account is locked for ' . LOGIN_WINDOW_MIN . ' minutes.';
+            // only record locks on staff/admin/owner accounts (so strangers guessing random names cannot fill the log)
+            if ($u && role_of($u) !== 'customer') log_activity('login_locked', 'Account locked after ' . LOGIN_MAX_FAILS . ' wrong passwords', ['id' => $u['id'], 'username' => $u['username'], 'role' => role_of($u)]);
+        }
     }
-    $error = 'Invalid username or password.';
 }
 $title = 'Log in';
 include 'includes/header.php';

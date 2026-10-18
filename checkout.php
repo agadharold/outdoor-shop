@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cart = $_SESSION['cart'];
             $ids = array_map('intval', array_keys($cart));
             $in = implode(',', array_fill(0, count($ids), '?'));
-            $st = $pdo->prepare("SELECT id, name, price, stock FROM products WHERE id IN ($in) FOR UPDATE");
+            $st = $pdo->prepare("SELECT id, name, price, sale_price, stock FROM products WHERE id IN ($in) FOR UPDATE");
             $st->execute($ids);
             $rows = [];
             foreach ($st->fetchAll() as $r) $rows[(int)$r['id']] = $r;
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $r = $rows[(int)$id] ?? null;
                 if (!$r) throw new RuntimeException('A product in your cart is no longer available.');
                 if ((int)$r['stock'] < $qty) throw new RuntimeException("Sorry, only {$r['stock']} of {$r['name']} left in stock.");
-                $subtotal += $qty * (float)$r['price'];
+                $subtotal += $qty * price_now($r);
             }
             $shipping = shipping_for($subtotal);
             $total = $subtotal + $shipping;
@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dec = $pdo->prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
             foreach ($cart as $id => $qty) {
                 $r = $rows[(int)$id];
-                $ins->execute([$orderId, $id, $r['name'], $r['price'], $qty]);
+                $ins->execute([$orderId, $id, $r['name'], price_now($r), $qty]);   // the order keeps the price paid, sale or not
                 $dec->execute([$qty, $id]);
             }
             $pdo->commit();

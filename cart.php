@@ -74,7 +74,7 @@ include 'includes/header.php';
               <a class="ci-img" href="product.php?id=<?= (int)$i['id'] ?>"><img src="assets/images/<?= e($i['image']) ?>" alt=""></a>
               <div class="ci-info">
                 <a class="ci-name" href="product.php?id=<?= (int)$i['id'] ?>"><?= e($i['name']) ?></a>
-                <span class="muted"><?= peso($i['price']) ?> each</span>
+                <span class="muted"><?= peso($i['unit']) ?> each<?php if (on_sale($i)): ?> <s class="was"><?= peso($i['price']) ?></s><?php endif; ?></span>
               </div>
               <div class="stepper">
                 <button type="button" data-step="-1" aria-label="Less">&minus;</button>

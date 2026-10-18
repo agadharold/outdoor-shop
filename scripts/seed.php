@@ -3,6 +3,7 @@
 // Allowed from the command line, or from a browser on the same computer (localhost) only.
 if (PHP_SAPI !== 'cli' && !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) { http_response_code(404); exit; }
 if (PHP_SAPI !== 'cli') header('Content-Type: text/plain; charset=utf-8');
+define('SKIP_GATES', true);   // the setup script must run before the upgrade/maintenance checks
 require __DIR__ . '/../config.php';
 
 // XAMPP: create the database if it doesn't exist yet (Docker creates it for you)
@@ -20,8 +21,19 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(120) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   is_admin TINYINT(1) NOT NULL DEFAULT 0,
+  is_owner TINYINT(1) NOT NULL DEFAULT 0,
+  is_staff TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB");
+// Upgrade older databases: add the owner column if it is missing.
+if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'is_owner'")->fetch()) {
+    $pdo->exec("ALTER TABLE users ADD COLUMN is_owner TINYINT(1) NOT NULL DEFAULT 0 AFTER is_admin");
+    echo "Added the owner role to the users table.\n";
+}
+if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'is_staff'")->fetch()) {
+    $pdo->exec("ALTER TABLE users ADD COLUMN is_staff TINYINT(1) NOT NULL DEFAULT 0 AFTER is_owner");
+    echo "Added the staff role to the users table.\n";
+}
 $pdo->exec("CREATE TABLE IF NOT EXISTS categories (
   id INT AUTO_INCREMENT PRIMARY KEY,
   slug VARCHAR(50) NOT NULL UNIQUE,
@@ -34,6 +46,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS products (
   description VARCHAR(255) NOT NULL,
   details TEXT NULL,
   price DECIMAL(10,2) NOT NULL,
+  sale_price DECIMAL(10,2) NULL,
   stock INT NOT NULL DEFAULT 0,
   image VARCHAR(100) NOT NULL,
   featured TINYINT(1) NOT NULL DEFAULT 0,
@@ -51,7 +64,8 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS orders (
   subtotal DECIMAL(10,2) NOT NULL,
   shipping_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
   total DECIMAL(10,2) NOT NULL,
-  status ENUM('pending','paid','shipped','delivered','cancelled') NOT NULL DEFAULT 'pending',
+  status ENUM('pending','paid','shipped','delivered','cancelled','refunded') NOT NULL DEFAULT 'pending',
+  refund_reason VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB");
@@ -63,6 +77,40 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS order_items (
   price DECIMAL(10,2) NOT NULL,
   qty INT NOT NULL,
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB");
+
+// ---- upgrades for older databases (safe to repeat) ----
+if (!$pdo->query("SHOW COLUMNS FROM products LIKE 'sale_price'")->fetch()) {
+    $pdo->exec("ALTER TABLE products ADD COLUMN sale_price DECIMAL(10,2) NULL AFTER price");
+    echo "Added sale prices to products.\n";
+}
+$col = $pdo->query("SHOW COLUMNS FROM orders LIKE 'status'")->fetch();
+if ($col && !str_contains((string)$col['Type'], 'refunded')) {
+    $pdo->exec("ALTER TABLE orders MODIFY status ENUM('pending','paid','shipped','delivered','cancelled','refunded') NOT NULL DEFAULT 'pending'");
+    echo "Added the Refunded order status.\n";
+}
+if (!$pdo->query("SHOW COLUMNS FROM orders LIKE 'refund_reason'")->fetch()) {
+    $pdo->exec("ALTER TABLE orders ADD COLUMN refund_reason VARCHAR(255) NULL AFTER status");
+}
+$pdo->exec("CREATE TABLE IF NOT EXISTS activity_log (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  username VARCHAR(30) NOT NULL DEFAULT '',
+  role VARCHAR(10) NOT NULL DEFAULT '',
+  action VARCHAR(40) NOT NULL,
+  detail VARCHAR(500) NOT NULL DEFAULT '',
+  ip VARCHAR(45) NOT NULL DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_created (created_at),
+  KEY idx_action (action)
+) ENGINE=InnoDB");
+$pdo->exec("CREATE TABLE IF NOT EXISTS login_attempts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ident VARCHAR(120) NOT NULL,
+  ip VARCHAR(45) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ident (ident, created_at),
+  KEY idx_ip (ip, created_at)
 ) ENGINE=InnoDB");
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
@@ -108,20 +156,29 @@ if (!(int)$pdo->query("SELECT COUNT(*) FROM products")->fetchColumn()) {
 // No default passwords are stored in this file. Set ADMIN_PASS yourself,
 // or a random one is generated and shown ONCE below. Save it!
 if (!(int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn()) {
-    $u = $pdo->prepare("INSERT INTO users (username, name, email, password_hash, is_admin) VALUES (?,?,?,?,?)");
+    $u = $pdo->prepare("INSERT INTO users (username, name, email, password_hash, is_admin, is_owner) VALUES (?,?,?,?,?,?)");
     $adminUser = env('ADMIN_USER', 'admin');
     $adminPass = env('ADMIN_PASS', '') ?: bin2hex(random_bytes(6));
-    $u->execute([$adminUser, 'Administrator', env('ADMIN_EMAIL', 'admin@example.com'),
-                 password_hash($adminPass, PASSWORD_DEFAULT), 1]);
-    echo "Created admin user '" . $adminUser . "'.\n";
+    $u->execute([$adminUser, 'Owner', env('ADMIN_EMAIL', 'admin@example.com'),
+                 password_hash($adminPass, PASSWORD_DEFAULT), 1, 1]);
+    echo "Created owner account '" . $adminUser . "'.\n";
     if (env('ADMIN_PASS', '') === '') {
         echo "Admin password (shown only once, save it now): " . $adminPass . "\n";
     }
     // Optional demo customer. Off by default. Enable with SEED_DEMO_USER=1
     if (env('SEED_DEMO_USER', '0') === '1') {
         $demoPass = bin2hex(random_bytes(6));
-        $u->execute(['demo', 'Demo Customer', 'customer@example.com', password_hash($demoPass, PASSWORD_DEFAULT), 0]);
+        $u->execute(['demo', 'Demo Customer', 'customer@example.com', password_hash($demoPass, PASSWORD_DEFAULT), 0, 0]);
         echo "Created demo customer 'demo'. Password (shown only once): " . $demoPass . "\n";
     }
 }
+// Older databases have no owner yet: the first admin becomes the owner.
+if (!(int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_owner = 1")->fetchColumn()) {
+    $first = $pdo->query("SELECT id, username FROM users WHERE is_admin = 1 ORDER BY id LIMIT 1")->fetch();
+    if ($first) {
+        $pdo->prepare("UPDATE users SET is_owner = 1 WHERE id = ?")->execute([$first['id']]);
+        echo "No owner found, so '" . $first['username'] . "' is now the Owner.\n";
+    }
+}
+$pdo->prepare("INSERT INTO settings (k, v) VALUES ('schema_version', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)")->execute([(string)SCHEMA_VERSION]);
 echo "Setup complete.\n";

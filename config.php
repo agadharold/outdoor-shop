@@ -22,6 +22,10 @@ define('SHOP_NAME', trim($__settings['shop_name'] ?? '') ?: 'Outdoor Boys');
 define('SHIPPING_FEE', (float)($__settings['shipping_fee'] ?? 150));
 define('FREE_SHIPPING_MIN', (float)($__settings['free_shipping_min'] ?? 5000));
 define('ANNOUNCEMENT', trim($__settings['announcement'] ?? ''));
+define('MAINTENANCE', ($__settings['maintenance'] ?? '0') === '1');
+define('MAINTENANCE_MSG', trim($__settings['maintenance_message'] ?? '') ?: "We're making some improvements and will be back shortly. Thank you for your patience!");
+const SCHEMA_VERSION = 3;   // bumped whenever scripts/seed.php adds tables/columns
+require __DIR__ . '/includes/security.php';
 
 if (PHP_SAPI !== 'cli') {
     session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
@@ -94,20 +98,54 @@ function login_user(array $u): void {
 }
 function require_login(string $root = ''): void {
     if (!current_user()) {
-        $next = ($root !== '' ? 'admin/' : '') . basename($_SERVER['SCRIPT_NAME']) . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : '');
+        $next = ($root !== '' ? 'admin/' : '') . basename($_SERVER['SCRIPT_NAME']) . (($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
         redirect($root . 'login.php?next=' . urlencode($next));
     }
 }
-/** Checks the database (not the session), so removing someone's admin access takes effect immediately. */
-function is_admin(): bool {
+/** The current user's role, read from the database (not the session), so a role change applies immediately.
+ *  One of: owner, admin, staff, customer, guest. */
+function current_role(): string {
+    static $cache = null;
+    if ($cache !== null) return $cache;
     $u = current_user();
-    if (!$u) return false;
-    $st = db()->prepare("SELECT is_admin FROM users WHERE id = ?");
-    $st->execute([$u['id']]);
-    return (bool)$st->fetchColumn();
+    if (!$u) return $cache = 'guest';
+    try {
+        $st = db()->prepare("SELECT is_admin, is_owner, is_staff FROM users WHERE id = ?");
+        $st->execute([$u['id']]);
+        $r = $st->fetch();
+    } catch (PDOException $e) {
+        $r = false;   // columns not created yet: open scripts/seed.php once to upgrade
+    }
+    if (!$r) return $cache = 'customer';
+    if ($r['is_admin'] && $r['is_owner']) return $cache = 'owner';
+    if ($r['is_admin']) return $cache = 'admin';
+    return $cache = ($r['is_staff'] ? 'staff' : 'customer');
+}
+function role_of(array $u): string {
+    if (!empty($u['is_owner'])) return 'owner';
+    if (!empty($u['is_admin'])) return 'admin';
+    return !empty($u['is_staff']) ? 'staff' : 'customer';
+}
+function is_owner(): bool { return current_role() === 'owner'; }
+function is_admin(): bool { return in_array(current_role(), ['owner', 'admin'], true); }
+/** Staff, admins and the owner can use the admin panel (staff only get the Orders page). */
+function is_staff_member(): bool { return in_array(current_role(), ['owner', 'admin', 'staff'], true); }
+function require_staff(): void {
+    if (!is_staff_member()) { http_response_code(403); exit('Staff only.'); }
 }
 function require_admin(): void {
     if (!is_admin()) { http_response_code(403); exit('Admins only.'); }
+}
+function require_owner(): void {
+    if (!is_owner()) { http_response_code(403); exit('Owner only.'); }
+}
+/** The owner can manage everyone. Admins can manage customers, staff and themselves, never other admins or the owner. */
+function can_manage_user(array $target): bool {
+    $me = current_user();
+    if (!$me) return false;
+    if (is_owner()) return true;
+    if ((int)$target['id'] === (int)$me['id']) return true;
+    return empty($target['is_admin']) && empty($target['is_owner']);
 }
 
 function brand_html(): string {
@@ -148,7 +186,8 @@ function cart_items(): array {
     $st->execute($ids);
     foreach ($st->fetchAll() as $p) {
         $p['qty'] = (int)$cart[$p['id']];
-        $p['line'] = $p['qty'] * (float)$p['price'];
+        $p['unit'] = price_now($p);
+        $p['line'] = $p['qty'] * $p['unit'];
         $out['items'][] = $p;
         $out['count'] += $p['qty'];
         $out['subtotal'] += $p['line'];
@@ -157,6 +196,18 @@ function cart_items(): array {
     $out['total'] = $out['subtotal'] + $out['shipping'];
     return $out;
 }
+
+/** The price customers pay: the owner's sale price when one is set (and lower than the normal price). */
+function on_sale(array $p): bool {
+    return isset($p['sale_price']) && $p['sale_price'] !== null && $p['sale_price'] !== '' && (float)$p['sale_price'] < (float)$p['price'];
+}
+function price_now(array $p): float { return on_sale($p) ? (float)$p['sale_price'] : (float)$p['price']; }
+function price_html(array $p): string {
+    return on_sale($p) ? '<strong class="price sale">' . peso($p['sale_price']) . '</strong> <s class="was">' . peso($p['price']) . '</s>'
+                       : '<strong class="price">' . peso($p['price']) . '</strong>';
+}
+/** SQL for the price customers pay (used for sorting). */
+const SQL_PRICE_NOW = "IF(p.sale_price IS NOT NULL AND p.sale_price < p.price, p.sale_price, p.price)";
 
 function categories(): array {
     static $cache = null;
@@ -170,8 +221,20 @@ function categories(): array {
 
 function status_label(string $s): string {
     return ['pending' => 'Order placed', 'paid' => 'Confirmed', 'shipped' => 'Shipped',
-            'delivered' => 'Delivered', 'cancelled' => 'Cancelled'][$s] ?? ucfirst($s);
+            'delivered' => 'Delivered', 'cancelled' => 'Cancelled', 'refunded' => 'Refunded'][$s] ?? ucfirst($s);
 }
+/** Which statuses a person may move an order to. Staff: forward only. Admin: forward, or cancel while still pending.
+ *  Owner: also backward (to correct a mistake). Refunds and voiding paid orders are owner-only, on admin/refund.php. */
+function order_transitions(string $current, string $role): array {
+    $flow = ['pending', 'paid', 'shipped', 'delivered'];
+    $i = array_search($current, $flow, true);
+    if ($i === false) return [];                        // cancelled / refunded orders are final
+    $out = array_slice($flow, $i + 1);                  // forward
+    if ($role === 'owner') $out = array_merge(array_slice($flow, 0, $i), $out);
+    if ($current === 'pending' && in_array($role, ['admin', 'owner'], true)) $out[] = 'cancelled';
+    return in_array($role, ['staff', 'admin', 'owner'], true) ? $out : [];
+}
+
 function status_badge(string $s): string {
     return '<span class="badge st-' . e($s) . '">' . e(status_label($s)) . '</span>';
 }
@@ -183,6 +246,7 @@ function product_card(array $p, string $root = ''): void {
       <a href="<?= $url ?>" class="thumb">
         <img src="<?= $root ?>assets/images/<?= e($p['image']) ?>" alt="<?= e($p['name']) ?>" loading="lazy">
         <?php if ($out): ?><span class="tag tag-out">Sold out</span>
+        <?php elseif (on_sale($p)): ?><span class="tag tag-sale">Sale</span>
         <?php elseif ($stock <= 5): ?><span class="tag tag-low">Only <?= $stock ?> left</span>
         <?php elseif (!empty($p['featured'])): ?><span class="tag">Popular</span><?php endif; ?>
       </a>
@@ -191,15 +255,50 @@ function product_card(array $p, string $root = ''): void {
         <h3><a href="<?= $url ?>"><?= e($p['name']) ?></a></h3>
         <p class="desc"><?= e($p['description']) ?></p>
         <div class="buy-row">
-          <strong class="price"><?= peso($p['price']) ?></strong>
+          <span class="price-box"><?= price_html($p) ?></span>
           <form method="post" action="<?= $root ?>cart.php" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="add">
             <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
-            <input type="hidden" name="back" value="<?= e(basename($_SERVER['SCRIPT_NAME']) . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : '')) ?>">
+            <input type="hidden" name="back" value="<?= e(basename($_SERVER['SCRIPT_NAME']) . (($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '')) ?>">
             <button type="submit" class="btn sm" <?= $out ? 'disabled' : '' ?>><?= icon('cart', 16) ?> Add</button>
           </form>
         </div>
       </div>
     </article>
 <?php }
+
+// ---- gates that run on every page (not for the setup script) ----
+if (PHP_SAPI !== 'cli' && !defined('SKIP_GATES')) {
+    // 1) The database must have been upgraded by scripts/seed.php
+    if ((int)($__settings['schema_version'] ?? 0) < SCHEMA_VERSION) {
+        http_response_code(503);
+        exit('<!DOCTYPE html><meta charset="utf-8"><body style="font-family:sans-serif;max-width:560px;margin:15vh auto;padding:0 1rem">'
+           . '<h2>One-time update needed</h2><p>Open <code>scripts/seed.php</code> in your browser once '
+           . '(for example <code>http://localhost/outdoor-shop/scripts/seed.php</code>), then refresh this page. No data is deleted.</p>');
+    }
+    // 2) Maintenance mode: customers see a "back soon" page; staff, admins and the owner can still use everything
+    if (MAINTENANCE) {
+        $__dir = basename(dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+        $__script = basename($_SERVER['SCRIPT_NAME'] ?? '');
+        $__open = $__dir === 'admin' || in_array($__script, ['login.php', 'logout.php'], true);
+        if (!$__open && !is_staff_member()) {
+            http_response_code(503);
+            header('Retry-After: 3600');
+            ?><!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Back soon | <?= e(SHOP_NAME) ?></title><link rel="stylesheet" href="assets/style.css"></head>
+<body><main class="maint">
+  <div class="maint-card">
+    <span class="maint-icon"><?= icon('box', 44) ?></span>
+    <h1><?= brand_html() ?></h1>
+    <h2>We'll be right back</h2>
+    <p><?= e(MAINTENANCE_MSG) ?></p>
+    <p class="muted small"><a href="login.php">Staff log in</a></p>
+  </div>
+</main></body></html>
+<?php
+            exit;
+        }
+    }
+}

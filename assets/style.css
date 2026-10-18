@@ -279,3 +279,22 @@ textarea { resize: vertical; }
 .inline-card { padding: 1.1rem 1.4rem; } .inline-card label { margin-bottom: .5rem; }
 .inline-card .inline-form input { flex: 1; min-width: 200px; }
 td .inline-form input[type=text] { min-width: 180px; }
+
+/* ---- owner features ---- */
+.tag-sale { background: #dc2626; }
+.tag-inline { background: #dc2626; color: #fff; font-size: .75rem; font-weight: 700; padding: .15rem .55rem; border-radius: 999px; vertical-align: middle; }
+.price.sale { color: #dc2626; }
+.was { color: var(--muted); font-size: .85em; font-weight: 500; }
+.price-box { display: inline-flex; align-items: baseline; gap: .4rem; flex-wrap: wrap; }
+.st-refunded { background: #f3e8ff; color: #6b21a8; }
+.maint-bar { background: #b45309; color: #fff; font-weight: 600; }
+.maint { min-height: 100vh; display: grid; place-items: center; padding: 1rem; background: #f4f7f4; }
+.maint-card { background: #fff; border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.08); padding: 2.5rem 2rem; max-width: 460px; text-align: center; }
+.maint-card h1 { font-size: 1.4rem; margin: .5rem 0; } .maint-card h2 { margin: 1rem 0 .5rem; }
+.maint-icon { color: var(--primary); display: inline-flex; }
+.nowrap { white-space: nowrap; }
+.two-col { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; margin-bottom: 1.5rem; align-items: start; }
+@media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+.bar-cell { width: 35%; } .mini-bar { display: block; height: 10px; border-radius: 6px; background: var(--primary); }
+.inline-card .inline-form input[type=date] { flex: 0 1 180px; min-width: 150px; }
+.inline-card .inline-form label { margin: 0; }

@@ -5,7 +5,7 @@ $id = (int)($_GET['id'] ?? 0);
 $st = db()->prepare("SELECT * FROM orders WHERE id = ?");
 $st->execute([$id]);
 $o = $st->fetch();
-if (!$o || ($o['user_id'] != current_user()['id'] && !is_admin())) {
+if (!$o || ($o['user_id'] != current_user()['id'] && !is_staff_member())) {
     http_response_code(404); exit('Order not found.');
 }
 $it = db()->prepare("SELECT oi.*, p.image FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?");
@@ -36,6 +36,8 @@ include 'includes/header.php';
 
   <?php if ($o['status'] === 'cancelled'): ?>
     <div class="error">This order was cancelled.</div>
+  <?php elseif ($o['status'] === 'refunded'): ?>
+    <div class="error">This order was refunded.</div>
   <?php else: ?>
     <ol class="timeline">
       <?php foreach ($keys as $n => $k): ?>

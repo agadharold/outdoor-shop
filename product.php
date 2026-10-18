@@ -25,7 +25,7 @@ include 'includes/header.php';
     <div class="detail-info">
       <small class="cat"><?= e($p['category_name']) ?></small>
       <h1><?= e($p['name']) ?></h1>
-      <p class="price big"><?= peso($p['price']) ?></p>
+      <p class="price big"><?= price_html($p) ?><?php if (on_sale($p)): ?> <span class="tag-inline">Sale</span><?php endif; ?></p>
       <p class="lead"><?= e($p['description']) ?></p>
       <?php if ($p['details']): ?><p class="muted"><?= nl2br(e($p['details'])) ?></p><?php endif; ?>
       <p>

@@ -5,7 +5,8 @@ require_admin();
 $root = '../';
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
-$p = ['name' => '', 'description' => '', 'details' => '', 'price' => '', 'stock' => 10, 'category_id' => 0, 'featured' => 0, 'image' => ''];
+$iAmOwner = is_owner();
+$p = ['name' => '', 'description' => '', 'details' => '', 'price' => '', 'sale_price' => null, 'stock' => 10, 'category_id' => 0, 'featured' => 0, 'image' => ''];
 if ($id) {
     $st = db()->prepare("SELECT * FROM products WHERE id = ?");
     $st->execute([$id]);
@@ -15,13 +16,17 @@ if ($id) {
 }
 $cats = db()->query("SELECT * FROM categories ORDER BY name")->fetchAll();
 $errors = [];
+$before = $p;   // for the activity log
+// Only the owner may change a price or set a sale price. An admin sets the price only when adding a new product.
+$canPrice = $iAmOwner || !$id;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $p['name']        = trim($_POST['name'] ?? '');
     $p['description'] = trim($_POST['description'] ?? '');
     $p['details']     = trim($_POST['details'] ?? '');
-    $p['price']       = trim((string)($_POST['price'] ?? ''));
+    if ($canPrice) $p['price'] = trim((string)($_POST['price'] ?? ''));
+    if ($iAmOwner) $p['sale_price'] = trim((string)($_POST['sale_price'] ?? ''));
     $p['stock']       = trim((string)($_POST['stock'] ?? ''));
     $p['featured']    = isset($_POST['featured']) ? 1 : 0;
     $p['category_id'] = (int)($_POST['category_id'] ?? 0);
@@ -30,6 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($p['name'] === '' || mb_strlen($p['name']) > 100) $errors[] = 'Name is required (max 100 characters).';
     if ($p['description'] === '' || mb_strlen($p['description']) > 255) $errors[] = 'Short description is required (max 255 characters).';
     if (!is_numeric($p['price']) || (float)$p['price'] < 0) $errors[] = 'Enter a valid price.';
+    if ($iAmOwner && $p['sale_price'] !== '' && $p['sale_price'] !== null) {
+        if (!is_numeric($p['sale_price']) || (float)$p['sale_price'] < 0) $errors[] = 'Enter a valid sale price.';
+        elseif (is_numeric($p['price']) && (float)$p['sale_price'] >= (float)$p['price']) $errors[] = 'The sale price must be lower than the normal price.';
+    }
     if (!ctype_digit($p['stock'])) $errors[] = 'Stock must be a whole number (0 or more).';
 
     // category: pick one, or type a new one
@@ -78,12 +87,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             if ($newImage !== null) $p['image'] = $newImage;
             if ($id) {
-                $pdo->prepare("UPDATE products SET category_id=?, name=?, description=?, details=?, price=?, stock=?, image=?, featured=? WHERE id=?")
-                    ->execute([$p['category_id'], $p['name'], $p['description'], $p['details'] ?: null, $p['price'], (int)$p['stock'], $p['image'], $p['featured'], $id]);
+                $sale = ($p['sale_price'] === '' || $p['sale_price'] === null) ? null : $p['sale_price'];
+                $pdo->prepare("UPDATE products SET category_id=?, name=?, description=?, details=?, price=?, sale_price=?, stock=?, image=?, featured=? WHERE id=?")
+                    ->execute([$p['category_id'], $p['name'], $p['description'], $p['details'] ?: null, $p['price'], $sale, (int)$p['stock'], $p['image'], $p['featured'], $id]);
+                $after = $p; $after['sale_price'] = $sale; $after['image'] = $newImage !== null ? 'new photo' : '';
+                $what = diff_text($before, $after, ['name' => 'name', 'price' => 'price', 'sale_price' => 'sale price', 'stock' => 'stock', 'category_id' => 'category id',
+                                                     'featured' => 'popular', 'description' => 'short description', 'details' => 'details']);
+                if ($newImage !== null) $what .= ($what ? '; ' : '') . 'new photo';
+                log_activity(($before['price'] != $p['price'] || ($before['sale_price'] ?? null) != $sale) ? 'price_change' : 'product_edit',
+                             "Product #$id “{$p['name']}”" . ($what ? ': ' . $what : ': no changes'));
                 flash('Product updated.');
             } else {
                 $pdo->prepare("INSERT INTO products (category_id, name, description, details, price, stock, image, featured) VALUES (?,?,?,?,?,?,?,?)")
                     ->execute([$p['category_id'], $p['name'], $p['description'], $p['details'] ?: null, $p['price'], (int)$p['stock'], $p['image'], $p['featured']]);
+                $newId = (int)$pdo->lastInsertId();
+                log_activity('product_add', "Added product #$newId “{$p['name']}” at " . peso($p['price']) . ", stock {$p['stock']}");
                 flash('Product added.');
             }
             redirect('products.php');
@@ -116,13 +134,24 @@ include '../includes/header.php';
     <div class="row-2">
       <div>
         <label for="price">Price (₱) *</label>
-        <input type="number" id="price" name="price" step="0.01" min="0" value="<?= e($p['price']) ?>" required>
+        <input type="number" id="price" name="price" step="0.01" min="0" value="<?= e($p['price']) ?>" required <?= $canPrice ? '' : 'disabled' ?>>
+        <?php if (!$canPrice): ?><p class="muted small">Only the owner can change prices.</p><?php endif; ?>
       </div>
       <div>
         <label for="stock">Stock *</label>
         <input type="number" id="stock" name="stock" min="0" step="1" value="<?= e($p['stock']) ?>" required>
       </div>
     </div>
+
+    <?php if ($iAmOwner): ?>
+    <div class="row-2">
+      <div>
+        <label for="sale_price">Sale price (₱, optional)</label>
+        <input type="number" id="sale_price" name="sale_price" step="0.01" min="0" value="<?= e($p['sale_price'] ?? '') ?>" placeholder="Leave empty for no sale">
+        <p class="muted small">Customers see this price, with the normal price crossed out. Clear it to end the sale.</p>
+      </div>
+    </div>
+    <?php endif; ?>
 
     <div class="row-2">
       <div>

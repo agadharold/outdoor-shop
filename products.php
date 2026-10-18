@@ -5,8 +5,8 @@ $cat  = trim($_GET['cat'] ?? '');
 $sort = $_GET['sort'] ?? 'new';
 $orders = [
   'new'        => 'p.id DESC',
-  'price_asc'  => 'p.price ASC',
-  'price_desc' => 'p.price DESC',
+  'price_asc'  => SQL_PRICE_NOW . ' ASC',
+  'price_desc' => SQL_PRICE_NOW . ' DESC',
   'name'       => 'p.name ASC',
 ];
 $orderBy = $orders[$sort] ?? $orders['new'];

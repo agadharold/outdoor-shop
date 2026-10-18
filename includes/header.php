@@ -18,6 +18,9 @@ $activeCat = $_GET['cat'] ?? '';
   <link rel="stylesheet" href="<?= $root ?>assets/style.css">
 </head>
 <body>
+<?php if (MAINTENANCE && is_staff_member()): ?>
+<div class="announce maint-bar">Maintenance mode is ON: customers cannot see the shop right now. You can because you are staff.</div>
+<?php endif; ?>
 <div class="announce">
   <?php if (ANNOUNCEMENT !== ''): ?>
     <?= e(ANNOUNCEMENT) ?>
@@ -52,7 +55,7 @@ $activeCat = $_GET['cat'] ?? '';
           <div class="menu">
             <a href="<?= $root ?>orders.php">My orders</a>
             <a href="<?= $root ?>account.php">My account</a>
-            <?php if (!empty($user['is_admin'])): ?><a href="<?= $root ?>admin/orders.php">Admin panel</a><?php endif; ?>
+            <?php if (is_staff_member()): ?><a href="<?= $root ?>admin/orders.php">Admin panel</a><?php endif; ?>
             <a href="<?= $root ?>logout.php" class="danger">Log out</a>
           </div>
         </details>
