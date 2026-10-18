@@ -1,0 +1,17 @@
+   # Dependencies
+   /vendor/
+
+   # Secrets and local config
+   .env
+   .env.*
+   config.local.php
+
+   # System and editor files
+   .DS_Store
+   Thumbs.db
+   .idea/
+   .vscode/
+
+   # Logs and uploads
+   *.log
+   /uploads/
