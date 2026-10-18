@@ -63,7 +63,7 @@ include '../includes/header.php';
       <?php foreach ($rows as $r): ?>
         <tr>
           <td class="nowrap"><?= e(date('M j, Y g:i A', strtotime($r['created_at']))) ?></td>
-          <td class="nowrap"><?php if ($r['username'] !== ''): ?>@<?= e($r['username']) ?> <small class="muted"><?= e($r['role']) ?></small><?php else: ?><small class="muted">—</small><?php endif; ?></td>
+          <td class="nowrap"><?php if ($r['username'] !== ''): ?>@<?= e($r['username']) ?> <small class="muted"><?= e(role_label($r['role'])) ?></small><?php else: ?><small class="muted">—</small><?php endif; ?></td>
           <td><span class="badge st-pending"><?= e(str_replace('_', ' ', $r['action'])) ?></span></td>
           <td><?= e($r['detail']) ?> <small class="muted"><?= e($r['ip']) ?></small></td>
         </tr>

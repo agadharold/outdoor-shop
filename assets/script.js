@@ -31,3 +31,12 @@ document.querySelectorAll('.stepper').forEach((st) => {
   }));
   input.addEventListener('change', queue);
 });
+
+// announcement notice: dismiss for this browser session
+const noticeX = document.getElementById('notice-x');
+if (noticeX) noticeX.addEventListener('click', () => {
+  const n = document.getElementById('notice');
+  n.classList.add('closing');
+  setTimeout(() => { n.hidden = true; }, 250);
+  try { sessionStorage.setItem('notice-' + n.dataset.key, 'x'); } catch (e) {}
+});

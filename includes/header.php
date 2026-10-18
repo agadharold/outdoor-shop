@@ -19,15 +19,24 @@ $activeCat = $_GET['cat'] ?? '';
 </head>
 <body>
 <?php if (MAINTENANCE && is_staff_member()): ?>
-<div class="announce maint-bar">Maintenance mode is ON: customers cannot see the shop right now. You can because you are staff.</div>
-<?php endif; ?>
-<div class="announce">
-  <?php if (ANNOUNCEMENT !== ''): ?>
-    <?= e(ANNOUNCEMENT) ?>
-  <?php else: ?>
-    <?= icon('truck', 16) ?> Free shipping on orders over <?= peso(FREE_SHIPPING_MIN) ?> <span class="dot">•</span> <?= icon('cash', 16) ?> Pay with cash on delivery
-  <?php endif; ?>
+<div class="notice maint-notice" role="status">
+  <div class="notice-in"><span class="notice-icon"><?= icon('wrench', 16) ?></span>
+    <span class="notice-text"><strong>Maintenance mode is on.</strong> Customers can't see the shop right now, but you can because you're staff.</span></div>
 </div>
+<?php endif; ?>
+<div class="notice" id="notice" data-key="<?= e(substr(md5(ANNOUNCEMENT . '|' . FREE_SHIPPING_MIN), 0, 8)) ?>" hidden>
+  <div class="notice-in">
+  <?php if (ANNOUNCEMENT !== ''): ?>
+    <span class="notice-icon accent"><?= icon('megaphone', 16) ?></span>
+    <span class="notice-text"><?= e(ANNOUNCEMENT) ?></span>
+  <?php else: ?>
+    <span class="notice-pill"><?= icon('truck', 16) ?> Free shipping over <?= peso(FREE_SHIPPING_MIN) ?></span>
+    <span class="notice-pill"><?= icon('cash', 16) ?> Pay on delivery</span>
+  <?php endif; ?>
+  </div>
+  <button type="button" class="notice-x" id="notice-x" aria-label="Dismiss"><?= icon('x', 16) ?></button>
+</div>
+<script>try{var n=document.getElementById('notice');if(sessionStorage.getItem('notice-'+n.dataset.key)!=='x')n.hidden=false;}catch(e){document.getElementById('notice').hidden=false;}</script>
 
 <header class="site-header">
   <div class="bar container">
@@ -50,6 +59,7 @@ $activeCat = $_GET['cat'] ?? '';
           <summary>
             <span class="avatar"><?= e(strtoupper(mb_substr($user['name'], 0, 1))) ?></span>
             <span class="who"><?= e(explode(' ', $user['name'])[0]) ?></span>
+            <?php if (current_role() !== 'customer'): ?><span class="role-chip role-<?= e(current_role()) ?>"><?= e(role_label(current_role())) ?></span><?php endif; ?>
             <?= icon('chevron', 16) ?>
           </summary>
           <div class="menu">

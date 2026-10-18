@@ -113,7 +113,7 @@ include '../includes/header.php';
       <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>Admin (orders, products, customers)</option>
     </select>
     <?php else: ?>
-    <p><strong><?= ucfirst($currentRole) ?></strong> <span class="muted">— <?= $targetIsOwner ? 'this is the Owner account' : ($self ? 'you can’t change your own role' : 'only the owner can change roles') ?></span></p>
+    <p><strong><?= e(role_label($currentRole)) ?></strong> <span class="muted">— <?= $targetIsOwner ? 'this is the ' . OWNER_TITLE . ' account' : ($self ? 'you can’t change your own role' : 'only the owner can change roles') ?></span></p>
     <?php endif; ?>
 
     <div class="form-actions">

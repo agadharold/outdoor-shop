@@ -22,8 +22,6 @@ svg { flex-shrink: 0; vertical-align: -.2em; }
 .default-submit { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 
 /* ---------- announcement + header ---------- */
-.announce { background: var(--forest); color: #d1fae5; font-size: .82rem; text-align: center; padding: .45rem 1rem; display: flex; justify-content: center; align-items: center; gap: .4rem; flex-wrap: wrap; }
-.announce .dot { opacity: .5; margin: 0 .4rem; }
 .site-header { background: rgba(255,255,255,.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 60; }
 .bar { display: flex; align-items: center; gap: 1.25rem; padding-top: .8rem; padding-bottom: .8rem; }
 .brand { display: inline-flex; align-items: center; gap: .55rem; text-decoration: none; color: var(--ink); font-weight: 800; font-size: 1.3rem; letter-spacing: -.02em; }
@@ -298,3 +296,27 @@ td .inline-form input[type=text] { min-width: 180px; }
 .bar-cell { width: 35%; } .mini-bar { display: block; height: 10px; border-radius: 6px; background: var(--primary); }
 .inline-card .inline-form input[type=date] { flex: 0 1 180px; min-width: 150px; }
 .inline-card .inline-form label { margin: 0; }
+
+/* ---- modern notice bar ---- */
+.notice { position: relative; display: flex; justify-content: center; align-items: center; gap: .6rem; padding: .5rem 3rem; background: linear-gradient(90deg, #ecfdf5, #f0fdf4 50%, #ecfdf5); border-bottom: 1px solid #d1fae5; color: #14532d; font-size: .86rem; transition: opacity .25s, max-height .25s; max-height: 80px; overflow: hidden; }
+.notice[hidden] { display: none; }
+.notice.closing { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+.notice-in { display: flex; align-items: center; justify-content: center; gap: .6rem; flex-wrap: wrap; }
+.notice-pill { display: inline-flex; align-items: center; gap: .4rem; background: #fff; border: 1px solid #bbf7d0; padding: .25rem .8rem; border-radius: 999px; font-weight: 600; box-shadow: 0 1px 2px rgba(21,128,61,.08); }
+.notice-pill svg { color: var(--primary); }
+.notice-icon { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,.08); flex: none; }
+.notice-icon.accent { background: var(--primary); color: #fff; }
+.notice-text { font-weight: 500; }
+.notice-x { position: absolute; right: .75rem; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #4d7c5f; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; transition: .15s; }
+.notice-x:hover { background: rgba(21,128,61,.12); color: var(--primary-d); }
+.maint-notice { background: linear-gradient(90deg, #fffbeb, #fef3c7 50%, #fffbeb); border-bottom-color: #fde68a; color: #78350f; }
+.maint-notice .notice-icon { color: #b45309; }
+@media (max-width: 560px) { .notice { padding: .45rem 2.5rem .45rem 1rem; font-size: .8rem; } .notice-pill { padding: .2rem .65rem; } }
+
+/* ---- role chip next to the name ---- */
+.role-chip { font-size: .68rem; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; padding: .12rem .5rem; border-radius: 999px; background: #e0e7ff; color: #3730a3; }
+.role-owner { background: #fef3c7; color: #92400e; } .role-admin { background: #dcfce7; color: #166534; } .role-staff { background: #dbeafe; color: #1e40af; }
+@media (max-width: 560px) { .role-chip { display: none; } }
+
+/* ---- search bar: no double outline when typing ---- */
+.search input:focus { box-shadow: none; border: 0; }

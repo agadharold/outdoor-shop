@@ -22,6 +22,7 @@ define('SHOP_NAME', trim($__settings['shop_name'] ?? '') ?: 'Outdoor Boys');
 define('SHIPPING_FEE', (float)($__settings['shipping_fee'] ?? 150));
 define('FREE_SHIPPING_MIN', (float)($__settings['free_shipping_min'] ?? 5000));
 define('ANNOUNCEMENT', trim($__settings['announcement'] ?? ''));
+define('OWNER_TITLE', mb_substr(trim($__settings['owner_title'] ?? ''), 0, 20) ?: 'Owner');   // what the top role is called on screen (e.g. Owner or Head Admin)
 define('MAINTENANCE', ($__settings['maintenance'] ?? '0') === '1');
 define('MAINTENANCE_MSG', trim($__settings['maintenance_message'] ?? '') ?: "We're making some improvements and will be back shortly. Thank you for your patience!");
 const SCHEMA_VERSION = 3;   // bumped whenever scripts/seed.php adds tables/columns
@@ -75,6 +76,8 @@ function icon(string $name, int $size = 20): string {
       'pin'    => '<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
       'chevron'=> '<path d="m6 9 6 6 6-6"/>',
       'x'      => '<path d="M18 6 6 18M6 6l12 12"/>',
+      'megaphone' => '<path d="m3 11 18-5v12L3 14z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+      'wrench' => '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
     ];
     return '<svg width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? '') . '</svg>';
 }
@@ -120,6 +123,10 @@ function current_role(): string {
     if ($r['is_admin'] && $r['is_owner']) return $cache = 'owner';
     if ($r['is_admin']) return $cache = 'admin';
     return $cache = ($r['is_staff'] ? 'staff' : 'customer');
+}
+/** The name shown on screen for a role. */
+function role_label(string $role): string {
+    return ['owner' => OWNER_TITLE, 'admin' => 'Admin', 'staff' => 'Staff', 'customer' => 'Customer', 'guest' => 'Guest'][$role] ?? ucfirst($role);
 }
 function role_of(array $u): string {
     if (!empty($u['is_owner'])) return 'owner';

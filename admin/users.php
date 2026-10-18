@@ -30,7 +30,7 @@ include '../includes/header.php';
 <section class="container section">
   <div class="page-head"><h1>Admin</h1></div>
   <?php include '../includes/admin_nav.php'; ?>
-  <p class="muted"><strong>Owner:</strong> full control (settings, prices, refunds, reports, activity log, admin accounts, deleting).
+  <p class="muted"><strong><?= e(OWNER_TITLE) ?>:</strong> full control (settings, prices, refunds, reports, activity log, admin accounts, deleting).
     <strong>Admin:</strong> manages orders, products (not prices) and customers.
     <strong>Staff:</strong> can only move orders forward.
     Only the owner can change roles.</p>
@@ -47,7 +47,7 @@ include '../includes/header.php';
           <td><?= (int)$u['orders'] ?></td>
           <td>
             <?php $r = role_of($u); ?>
-            <span class="badge <?= ['owner' => 'st-shipped', 'admin' => 'st-delivered', 'staff' => 'st-paid', 'customer' => 'st-pending'][$r] ?>"><?= ucfirst($r) ?></span>
+            <span class="badge <?= ['owner' => 'st-shipped', 'admin' => 'st-delivered', 'staff' => 'st-paid', 'customer' => 'st-pending'][$r] ?>"><?= e(role_label($r)) ?></span>
             <?php $isLocked = isset($locked[login_ident($u['username'])]); if ($isLocked): ?><span class="badge st-cancelled">Locked</span><?php endif; ?>
           </td>
           <td class="nowrap">
