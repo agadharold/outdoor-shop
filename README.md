@@ -1,4 +1,4 @@
-# Outdoor Boys - Outdoor Shop 123
+# Outdoor Boys - Outdoor Shop
 
 A simple online shop for camping and outdoor gear, built with **PHP** and **MySQL**. It runs locally using **XAMPP**.
 
