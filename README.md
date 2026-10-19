@@ -113,4 +113,4 @@ outdoor-shop/
 
 ## Author
 
-Chikineyney qwerty
+Chikineyney
